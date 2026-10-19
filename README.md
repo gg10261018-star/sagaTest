@@ -234,6 +234,10 @@ internal/
 - **補償前的狀態變化**：如果使用者在兌換後、補償前已經把點數花掉，退點不受影響（是加點），但「收回道具」可能遇到道具已被使用。真實系統需要定義業務規則（改扣等值點數、或升級人工）
 - **觀測性**：告警目前只寫 log；可接 Slack / Telegram，並把 `compensating` 數量、補償重試次數做成 Prometheus metric
 - **Outbox**：目前 saga 狀態跟各服務的寫入不在同一個交易，中斷時靠「查證流水」補救；另一種常見做法是 Transactional Outbox + 訊息佇列
+- **客戶端斷線會中斷兌換**：saga 跟著 HTTP request 的 context 執行，客戶端斷線時正向流程中斷、轉入補償。資料仍一致（點數會退回），但使用者需要重新兌換。可改用 `context.WithoutCancel` 讓 saga 不受客戶端斷線影響
+- **Fencing 只做在協調器**：租約的 `WHERE lease_owner = ?` 只保護 `sagas` 表，送到下游服務的請求不帶 fencing token。舊處理者在租約過期後仍可能送出晚到的請求，這部分靠下游的冪等鍵 + 作廢標記擋下，而不是靠租約。下游若無法做到冪等，就需要把 fencing token 傳下去，由下游拒絕過期的 token
+- **租約依賴應用程式時鐘**：`lease_until` 用各台機器自己的時間計算與比較，多台機器時鐘偏移時，租約可能提早被判定過期。可改用資料庫的 `NOW(3)` 統一時間來源，並讓租約長度遠大於可能的時鐘偏移
+- **管理介面僅供 Demo**：`/admin/chaos`、`/admin/recover` 沒有任何認證；`scripts/grant-test.sql` 給測試帳號 `ALL PRIVILEGES ON *.*`，只為了讓整合測試能建立資料庫。正式環境應移除故障注入、管理介面加上認證，資料庫帳號只給最小權限
 
 ## 在 Windows 本機執行
 
