@@ -117,6 +117,11 @@ func (o *Orchestrator) runForward(ctx context.Context, s *Saga, owner string) er
 		err := o.executeWithRetry(ctx, step, s)
 		if err == nil {
 			s.CurrentStep++
+			if s.CurrentStep == len(o.steps) {
+				// 最後一步跟 completed 在同一次寫入。分兩次寫的話，中間崩潰會留下
+				// 「其實全部做完、狀態卻還是 pending」的 saga，被背景 worker 當成中斷整筆退掉。
+				s.Status = StatusCompleted
+			}
 			if err := o.save(ctx, s, owner); err != nil {
 				return err
 			}
@@ -153,8 +158,12 @@ func (o *Orchestrator) runForward(ctx context.Context, s *Saga, owner string) er
 		return o.runCompensation(ctx, s, owner)
 	}
 
-	s.Status = StatusCompleted
-	return o.save(ctx, s, owner)
+	if s.Status != StatusCompleted {
+		// 進來時步驟就已經全部做完（例如舊版本留下的資料），補寫 completed
+		s.Status = StatusCompleted
+		return o.save(ctx, s, owner)
+	}
+	return nil
 }
 
 func (o *Orchestrator) executeWithRetry(ctx context.Context, step Step, s *Saga) error {
@@ -310,6 +319,15 @@ func (o *Orchestrator) recoverOne(ctx context.Context, id int64) (bool, error) {
 		// 讓他重新兌換比默默在背景幫他完成更不容易造成誤解。
 		if s.UpdatedAt.After(now.Add(-o.cfg.StuckPendingAfter)) {
 			return false, nil
+		}
+		if s.CurrentStep >= len(o.steps) {
+			// 每一步都已確認成功，只差 completed 沒寫回 → 這筆兌換是完成的，不能退
+			s.Status = StatusCompleted
+			if err := o.save(ctx, s, owner); err != nil {
+				return false, err
+			}
+			o.log.Warn("中斷的 saga 其實已全部完成，補寫 completed", "request_id", s.RequestID)
+			return true, nil
 		}
 		report, highestApplied := o.ProbeAll(ctx, s)
 

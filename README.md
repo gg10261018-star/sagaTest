@@ -112,7 +112,7 @@ comp:deduct_points:demo-2 | demo-2 | redeem_refund | +100 | 800      | 900
 ### 6. 中斷恢復：排程查證流水
 
 程式在流程中途崩潰時，`sagas` 表的進度可能落後於實際（例如庫存已扣，但 `current_step` 還沒寫回）。
-背景 worker 撈到「`pending` 超過 `StuckPendingAfter` 且租約已過期」的 saga 時：
+背景 worker 撈到「`pending` 超過 `StuckPendingAfter` 且租約已過期」的 saga 時（若 `current_step` 已等於總步數，代表其實全部做完，直接補寫 `completed`；否則）：
 
 1. 對每一步呼叫 `Probe()`，到各服務流水查證：`none` / `applied` / `compensated` / `voided`
 2. 補償起點 = `max(流水裡最後一個 applied 的步驟, 當時正在執行的那一步)`
@@ -162,6 +162,7 @@ go test ./... -race -count=1 -v
 | `TestConcurrentSameRedeem_OnlyOnce` | 同一兌換併發 10 次 → 只兌換一次 |
 | `TestSameRequestIDDifferentPayload_Rejected` | 相同 `request_id` 帶不同參數 → 視為客戶端錯誤，拒絕 |
 | `TestCrashedSaga_ProbedFromLedgerAndCompensated` | 模擬崩潰：排程查證流水、依證據補償、留下查證紀錄 |
+| `TestCrashedAfterAllStepsApplied_MarkedCompleted` | 三步都成功、只差 `completed` 沒寫回就崩潰 → 補寫 completed，不能整筆退掉 |
 
 時間相關的測試使用可快轉的假時鐘（`internal/clock`），不需要真的等待退避或時限。
 

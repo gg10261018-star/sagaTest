@@ -444,3 +444,46 @@ func TestCrashedSaga_ProbedFromLedgerAndCompensated(t *testing.T) {
 		t.Logf("查證 %-14s → %s", p.Step, p.State)
 	}
 }
+
+// 情境：三步都成功、current_step 也寫到 3，但在寫入 completed 之前崩潰。
+// 這筆兌換其實已經完成，排程不能把它當成「中斷」整筆退掉。
+func TestCrashedAfterAllStepsApplied_MarkedCompleted(t *testing.T) {
+	e := newEnv(t)
+	store := e.orch.Store()
+
+	s, err := store.CreateOrGet(e.ctx, saga.Request{RequestID: "r-done", UserID: userID, ItemID: itemID, Cost: cost}, e.clk.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := store.Claim(e.ctx, s.ID, "crashed-instance", e.clk.Now(), 30*time.Second); !ok {
+		t.Fatal("claim 失敗")
+	}
+	for _, st := range []saga.Step{
+		saga.DeductPointsStep{Svc: e.points},
+		saga.DeductStockStep{Svc: e.inv},
+		saga.GrantItemStep{Svc: e.items},
+	} {
+		if err := st.Execute(e.ctx, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.CurrentStep = 3
+	if err := store.Save(e.ctx, s, "crashed-instance", e.clk.Now(), 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	// ← 這裡程式崩潰：status 還是 pending
+
+	e.clk.Advance(3 * time.Minute)
+	if _, err := e.orch.RecoverOnce(e.ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	final := e.get(t, "r-done")
+	if final.Status != saga.StatusCompleted {
+		t.Fatalf("狀態 = %s，期望 completed（%s）", final.Status, final.LastError)
+	}
+	if len(e.compLog.order) != 0 {
+		t.Fatalf("已完成的兌換不該被補償，實際補償了: %v", e.compLog.order)
+	}
+	e.assertState(t, startBalance-cost, startStock-1, 1)
+}
