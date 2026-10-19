@@ -17,7 +17,8 @@ import (
 
 // Open 建立（或重用）測試資料庫並清空所有表。
 // 環境變數 TEST_MYSQL_DSN 可覆寫連線字串（需要 CREATE DATABASE 權限）；
-// 連不上時整個測試會 Skip，而不是失敗。
+// 連不上時整個測試會 Skip，而不是失敗。設定 REQUIRE_MYSQL=1 時改為直接失敗——
+// CI 會開這個，避免「沒連上資料庫卻顯示 ok」的假通過。
 func Open(t *testing.T, name string) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_MYSQL_DSN")
@@ -36,6 +37,9 @@ func Open(t *testing.T, name string) *sql.DB {
 	}
 	defer admin.Close()
 	if err := admin.Ping(); err != nil {
+		if os.Getenv("REQUIRE_MYSQL") != "" {
+			t.Fatalf("REQUIRE_MYSQL 已設定，但連不上 MySQL: %v", err)
+		}
 		t.Skipf("沒有可用的 MySQL（%v），略過整合測試。可用 docker compose up -d mysql 啟動", err)
 	}
 

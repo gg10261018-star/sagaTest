@@ -1,5 +1,7 @@
 # saga-points-demo
 
+[![CI](https://github.com/gg10261018-star/sagaTest/actions/workflows/ci.yml/badge.svg)](https://github.com/gg10261018-star/sagaTest/actions/workflows/ci.yml)
+
 用 Golang + MySQL 實作「點數兌換道具」的 **Saga 分散式交易**，重點放在三件事：
 
 1. **冪等性**：同一個請求送幾次、併發送幾次，都只生效一次（三層防護）
@@ -135,12 +137,18 @@ docker compose up -d mysql      # 或使用自己的 MySQL，以 TEST_MYSQL_DSN 
 go test ./... -race -count=1 -v
 ```
 
+> **注意**：整合測試需要真實的 MySQL。連不上時測試會 **Skip** 而不是失敗，
+> 不加 `-v` 只會看到 `ok`，容易誤以為測過了。想確保真的有連上資料庫，可以設定
+> `REQUIRE_MYSQL=1`，連不上就直接失敗。CI（GitHub Actions）每次 push 都會起一個 MySQL 8.0、
+> 開啟 `REQUIRE_MYSQL` 跑完整測試。
+
 | 測試 | 驗證內容 |
 |---|---|
 | `TestConcurrentDuplicateRequest_DeductsOnce` | 同一請求併發 20 次、餘額只夠扣一次 → 只扣一次，20 個都回成功 |
 | `TestNaive_WithoutIdempotency_DeductsManyTimes` | 反面教材：沒有冪等性時，按一次被扣 10 次 |
 | `TestConcurrentDifferentRequests_NoOverspend` | 20 個不同請求搶 100 點 → 剛好 10 成功，不扣成負數 |
 | `TestNewUser_ConcurrentFirstOperation` | 新使用者 20 個請求同時加點，資料列建立競爭 |
+| `TestLedger_EveryEntryIsSelfConsistent` | 每一筆流水都能單獨驗算 `before + delta = after` |
 | `TestCompensate_IsIdempotent` | 補償併發觸發 10 次 → 只退一次 |
 | `TestCompensateBeforeForward_EmptyCompensationAndHanging` | 補償先到 → 不退點；正向晚到 → 被擋下 |
 | `TestHappyPath` | 正常兌換，流水一筆扣點 |
@@ -152,6 +160,7 @@ go test ./... -race -count=1 -v
 | `TestCompensationRetry_WithBackoff` | 退避間隔遞增（實測約 1s → 2.6s → 7.7s）、重試成功、只發低優先級告警 |
 | `TestCompensationDeadline_EscalatesToManual` | 超過時限 → `needs_manual`，warning ×1、critical ×1 |
 | `TestConcurrentSameRedeem_OnlyOnce` | 同一兌換併發 10 次 → 只兌換一次 |
+| `TestSameRequestIDDifferentPayload_Rejected` | 相同 `request_id` 帶不同參數 → 視為客戶端錯誤，拒絕 |
 | `TestCrashedSaga_ProbedFromLedgerAndCompensated` | 模擬崩潰：排程查證流水、依證據補償、留下查證紀錄 |
 
 時間相關的測試使用可快轉的假時鐘（`internal/clock`），不需要真的等待退避或時限。
