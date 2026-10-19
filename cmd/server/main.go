@@ -67,6 +67,18 @@ func main() {
 	invSvc := inventory.NewService(conn, clk)
 	itemSvc := items.NewService(conn, clk)
 
+	// 示範使用者的初始點數也走流水表，對帳才會平。
+	// request_id 固定，服務重啟時撞冪等鍵、不會重複加點。
+	if _, err := pointsSvc.ApplyPointsChange(ctx, points.Change{
+		RequestID: "seed:user-1001",
+		UserID:    1001,
+		Delta:     1000,
+		BizType:   points.BizAdminAdjust,
+	}); err != nil {
+		log.Error("寫入示範點數失敗", "err", err)
+		os.Exit(1)
+	}
+
 	// 每一步都包一層 ChaosStep，Demo 時可以用 /admin/chaos 現場製造故障
 	chaos := map[string]*saga.ChaosStep{}
 	var steps []saga.Step

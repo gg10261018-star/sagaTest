@@ -55,18 +55,14 @@ func Migrate(ctx context.Context, conn *sql.DB) error {
 	return nil
 }
 
-// SeedDemo 放一些示範資料（已存在就略過）。
+// SeedDemo 放示範用的庫存（已存在就略過）。
+//
+// 示範使用者的點數不在這裡寫：直接 INSERT user_points 會繞過流水表，
+// 對帳（餘額 = 流水加總）就不平了。點數一律走 points.ApplyPointsChange，見 cmd/server。
 func SeedDemo(ctx context.Context, conn *sql.DB, now time.Time) error {
-	stmts := []string{
-		`INSERT IGNORE INTO user_points (user_id, balance, updated_at) VALUES (1001, 1000, ?)`,
-		`INSERT IGNORE INTO inventory (item_id, stock, updated_at) VALUES (1, 5, ?)`,
-	}
-	for _, s := range stmts {
-		if _, err := conn.ExecContext(ctx, s, now); err != nil {
-			return err
-		}
-	}
-	return nil
+	_, err := conn.ExecContext(ctx,
+		`INSERT IGNORE INTO inventory (item_id, stock, updated_at) VALUES (1, 5, ?)`, now)
+	return err
 }
 
 func splitStatements(script string) []string {
