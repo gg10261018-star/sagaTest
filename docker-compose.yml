@@ -1,0 +1,28 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: saga_demo
+      MYSQL_USER: saga
+      MYSQL_PASSWORD: saga
+    ports:
+      - "3306:3306"
+    volumes:
+      # 讓測試使用者可以建立 saga_test_* 資料庫
+      - ./scripts/grant-test.sql:/docker-entrypoint-initdb.d/grant-test.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    environment:
+      MYSQL_DSN: "saga:saga@tcp(mysql:3306)/saga_demo"
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
