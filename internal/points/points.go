@@ -1,6 +1,6 @@
 // Package points 是「點數服務」，所有異動都記錄在 points_ledger（點數流水表）。
 //
-// 核心函式 ApplyPointsChange 實作三層冪等防護（對應 review-saga-idempotency.md）：
+// 核心函式 ApplyPointsChange 實作三層冪等防護：
 //
 //	第一層：先查流水表的 request_id，處理過就直接重放結果（最快，但檢查時間點太早）
 //	第二層：SELECT ... FOR UPDATE 鎖住餘額列，避免併發算出錯誤餘額；

@@ -15,7 +15,7 @@ const (
 	AlertCritical AlertLevel = "critical"
 )
 
-// Alerter 實務上會接 Slack / Telegram（像預警系統那樣），這裡抽成介面。
+// Alerter 實務上會接 Slack / Telegram 等通知管道，這裡抽成介面。
 type Alerter interface {
 	Alert(ctx context.Context, level AlertLevel, s *Saga, message string)
 }

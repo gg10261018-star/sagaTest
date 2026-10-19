@@ -101,7 +101,7 @@ type Querier interface {
 }
 
 // WithDeadlockRetry 在遇到死鎖時重跑整個交易。
-// 對應筆記 1.2：「程式碼必須針對 Deadlock 這個特定錯誤做重試，不能當一般錯誤放棄」。
+// InnoDB 偵測到死鎖時已經把本交易回滾，重跑即可成功，所以不能當一般錯誤放棄。
 func WithDeadlockRetry(ctx context.Context, maxAttempts int, fn func() error) error {
 	var err error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {

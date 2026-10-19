@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 面試現場 Demo：正常兌換 → 重送 → 製造故障 → 觀察背景補償 → 查流水
+# 現場 Demo：正常兌換 → 重送 → 製造故障 → 觀察背景補償 → 查流水
 set -euo pipefail
 BASE=${BASE:-http://localhost:8080}
 H='Content-Type: application/json'
